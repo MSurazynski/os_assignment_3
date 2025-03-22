@@ -2,6 +2,8 @@
 !*/
 !*.*
 
+threaded_basics.c
+
 # Prerequisites
 *.d
 

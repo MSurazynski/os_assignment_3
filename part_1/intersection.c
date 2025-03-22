@@ -4,7 +4,7 @@
  *
  * Intersection Part [REPLACE WITH PART NUMBER]
  * 
- * STUDENT_NAME_1 (STUDENT_NR_1)
+ * Michał Surażyński (1967665)
  * STUDENT_NAME_2 (STUDENT_NR_2)
  * STUDENT_NAME_3 (STUDENT_NR_3)
  */
@@ -22,6 +22,19 @@
 #include "input.h"
 
 // TODO: Global variables: mutexes, data structures, etc...
+// Mutex for the critical section
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+static int num_lanes = 4;
+static int num_directions = 4;
+static int num_lights = 16;
+typedef struct 
+{
+  int direction;
+  int lane;
+} light_loc;
+
+
+
 
 /* 
  * curr_car_arrivals[][][]
@@ -50,6 +63,8 @@ static sem_t car_sem[4][4];
  */
 static void* supply_cars()
 {
+  fprintf(stderr, "Supplier thread: Started.\n");    
+
   int t = 0;
   int num_curr_arrivals[4][4] = {{0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}};
 
@@ -68,6 +83,7 @@ static void* supply_cars()
     sem_post(&car_sem[arrival.side][arrival.direction]);
   }
 
+  fprintf(stderr, "Supplier thread: Closed.\n");
   return(0);
 }
 
@@ -79,6 +95,18 @@ static void* supply_cars()
  */
 static void* manage_light(void* arg)
 {
+  // Getting the function parameter
+  light_loc * argi;           // pointer to the function paramter value 
+  light_loc i;                // function paramter
+  argi = (light_loc *) arg;   // proper casting before dereferencing (could also be done in one statement)
+  i = *argi;                  // get the integer value of the pointer
+  free (arg);                 // we retrieved the value, so now the pointer can be deleted
+  
+  int direction = i.direction;
+  int lane = i.lane;
+  fprintf(stderr, "Thread Dir %d x Lane %d: Started.\n", direction, lane);
+  
+
   // TODO:
   // while not all arrivals have been handled, repeatedly:
   //  - wait for an arrival using the semaphore for this traffic light
@@ -88,7 +116,9 @@ static void* manage_light(void* arg)
   //  - make the traffic light turn red
   //  - unlock the right mutex(es)
 
-  return(0);
+
+  fprintf(stderr, "Thread Dir %d x Lane %d: Closed.\n", direction, lane);
+  pthread_exit(0);
 }
 
 
@@ -107,10 +137,39 @@ int main(int argc, char * argv[])
   start_time();
   
   // TODO: create a thread per traffic light that executes manage_light
+  pthread_t light_ids [num_lights];
+
+  for (int d = 0; d < num_directions; d++) {
+    for (int l = 0; l < num_lanes; l++) {
+      light_loc * parameter;
+      parameter = malloc (sizeof (int));  // memory will be freed by the child-thread
+      light_loc loc = {d, l};
+      *parameter = loc;        // assign an arbitrary value...   
+
+      if (!pthread_create (&light_ids[d * num_directions + l], NULL, manage_light, parameter) == 0) {
+        fprintf(stderr, "Thread Dir %d x Lane %d: Failed to create.\n", d, l);      // in case of failure
+      } else {
+        fprintf(stderr, "Dir %d x Lane %d: Created.\n", d, l);               // in case of correct execution
+      }
+    }
+  }
+
 
   // TODO: create a thread that executes supply_cars()
+  pthread_t supplier_id;
+  if (!pthread_create (&supplier_id, NULL, supply_cars, NULL) == 0) {
+    fprintf(stderr, "Supplier thread: Failed to create.\n");      // in case of failure
+  } else {
+    fprintf(stderr, "Supplier thread: Created.\n");               // in case of correct execution
+  }
+
 
   // TODO: wait for all threads to finish
+  for (int i = 0; i < num_lights; i++) {
+    pthread_join (light_ids[i], NULL);
+  }
+  pthread_join (supplier_id, NULL);
+
 
   // destroy semaphores
   for (int i = 0; i < 4; i++)
