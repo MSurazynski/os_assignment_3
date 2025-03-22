@@ -119,7 +119,7 @@ static void* manage_light(void* arg)
   //  - sleep for CROSS_TIME seconds
   //  - make the traffic light turn red
   //  - unlock the right mutex(es)
-  while(true) {
+  while (true) {
     // Either triggered from supplier when car arrived or from main when END_TIME is over
     sem_wait(&car_sem[*side_ptr][*direction_ptr]);
 
@@ -128,11 +128,12 @@ static void* manage_light(void* arg)
       fprintf(stderr, "Light thread side %d x dir %d: Closed.\n", *side_ptr, *direction_ptr);
       free(arg);
       pthread_exit(0);
-    }
+    } 
     // If not over continue
     
-    pthread_mutex_lock (&intersection_mutex);
-    // Start of critical section
+
+    // Request access to the critical section
+    pthread_mutex_lock(&intersection_mutex);
     
     // Turn green for the car with some ID
     int car_id = curr_car_arrivals[*side_ptr][*direction_ptr][*cars_serviced_ptr].id;
@@ -149,7 +150,7 @@ static void* manage_light(void* arg)
     (*cars_serviced_ptr)++;
 
     // End of critical section
-    pthread_mutex_unlock (&intersection_mutex);
+    pthread_mutex_unlock(&intersection_mutex);
   }
 }
 
@@ -157,9 +158,9 @@ static void* manage_light(void* arg)
 int main(int argc, char * argv[])
 {
   // Create semaphores to wait/signal for arrivals
-  for (int i = 0; i < 4; i++)
+  for(int i = 0; i < 4; i++)
   {
-    for (int j = 0; j < 4; j++)
+    for(int j = 0; j < 4; j++)
     {
       sem_init(&car_sem[i][j], 0, 0);
     }
