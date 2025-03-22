@@ -22,27 +22,21 @@
 #include "input.h"
 
 // TODO: Global variables: mutexes, data structures, etc...
-static pthread_mutex_t intersection_mutex = PTHREAD_MUTEX_INITIALIZER;  // Mutex for the critical section
-static int num_directions = 4;                                               // Number of lanes per direcion
-static int num_sides = 4;                                          // Number of directions
-static int num_lights = 16;                                             // Number of lights = num_lanes * num_directions
-static int curr_car_index[4][4]; // Keep track of how many cars where serviced per side per direction
-static int traffic_lights[4][4]; // Keep track of the color of the lights
-typedef enum {RED = 0, GREEN = 1} Light; 
-// Identifies each traffic light 
-typedef struct 
-{
-  int side;
-  int direction;
-} light_loc;
-
-typedef struct 
+static pthread_mutex_t intersection_mutex = PTHREAD_MUTEX_INITIALIZER;      // Mutex for the critical section
+typedef enum {RED = 0, GREEN = 1} Colors;     // Colors of the traffic lights
+typedef struct                                // Defines the traffic light
 {
   int side;
   int direction;
   int color;
+  int cars_serviced;
 } Traffic_Light;
-static Traffic_Light traffic_lights_new[4][4];
+
+const static int num_directions = 4;          // Number of lanes per direcion
+const static int num_sides = 4;               // Number of directions
+
+static Traffic_Light traffic_lights[4][4];    // Static array of all traffic lights 
+
 
 
 /* 
@@ -105,17 +99,17 @@ static void* supply_cars()
  */
 static void* manage_light(void* arg)
 {
-  // Getting the function parameter
-  light_loc * argi;           // pointer to the function paramter value 
-  light_loc i;                // function paramter
-  argi = (light_loc *) arg;   // proper casting before dereferencing (could also be done in one statement)
-  i = *argi;                  // get the integer value of the pointer
-  free (arg);                 // we retrieved the value, so now the pointer can be deleted
+  Traffic_Light * traffic_light_ptr;            // Pointer to a member of traffic_lights global array       
+  traffic_light_ptr = (Traffic_Light *) arg;    // Casting before dereferencing              
   
-  int side = i.side;
-  int direction = i.direction;
-  fprintf(stderr, "Light thread Side %d x Dir %d: Started.\n", side, direction);
-  
+  // Pointers to the attributes of the traffic light
+  int *side_ptr = &traffic_light_ptr->side;
+  int *direction_ptr = &traffic_light_ptr->direction;
+  int *color_ptr = &traffic_light_ptr->color;
+  int *cars_serviced_ptr = &traffic_light_ptr->cars_serviced;
+
+  fprintf(stderr, "Light thread side %d x dir %d: Started.\n", *side_ptr, *direction_ptr);
+
 
   // TODO:
   // while not all arrivals have been handled, repeatedly:
@@ -126,28 +120,33 @@ static void* manage_light(void* arg)
   //  - make the traffic light turn red
   //  - unlock the right mutex(es)
   while(true) {
-    sem_wait(&car_sem[side][direction]);
+    // Either triggered from supplier when car arrived or from main when END_TIME is over
+    sem_wait(&car_sem[*side_ptr][*direction_ptr]);
 
-    // Check if light should terminate
+    // Check if END_TIME is over
     if (get_time_passed() >= 40) {
-      fprintf(stderr, "Light thread Side %d x Dir %d: Closed.\n", side, direction);
+      fprintf(stderr, "Light thread side %d x dir %d: Closed.\n", *side_ptr, *direction_ptr);
+      free(arg);
       pthread_exit(0);
     }
-    
+    // If not over continue
     
     pthread_mutex_lock (&intersection_mutex);
     // Start of critical section
     
-    int id = curr_car_arrivals[side][direction][curr_car_index[side][direction]].id;
-    printf("traffic light %d %d turns green at time %d for car %d\n", side, direction, get_time_passed(), id);
-    traffic_lights[side][direction] = GREEN;
-    
+    // Turn green for the car with some ID
+    int car_id = curr_car_arrivals[*side_ptr][*direction_ptr][*cars_serviced_ptr].id;
+    printf("traffic light %d %d turns green at time %d for car %d\n", *side_ptr, *direction_ptr, get_time_passed(), car_id);
+    *color_ptr = GREEN;
+
     sleep(CROSS_TIME);
     
-    traffic_lights[side][direction] = RED;
-    printf("traffic light %d %d turns red at time %d\n", side, direction, get_time_passed());
+    // Turn red after the car
+    *color_ptr = RED;
+    printf("traffic light %d %d turns red at time %d\n", *side_ptr, *direction_ptr, get_time_passed());
     
-    curr_car_index[side][direction]++; // Car serviced
+    // Remember that the car was serviced
+    (*cars_serviced_ptr)++;
 
     // End of critical section
     pthread_mutex_unlock (&intersection_mutex);
@@ -157,7 +156,7 @@ static void* manage_light(void* arg)
 
 int main(int argc, char * argv[])
 {
-  // create semaphores to wait/signal for arrivals
+  // Create semaphores to wait/signal for arrivals
   for (int i = 0; i < 4; i++)
   {
     for (int j = 0; j < 4; j++)
@@ -166,32 +165,27 @@ int main(int argc, char * argv[])
     }
   }
 
-  // start the timer
+  // Start the timer
   start_time();
   
   
   // TODO: create a thread per traffic light that executes manage_light
-  for (int s = 0; s < num_sides; s++) {
-    for (int d = 0; d < num_directions; d++) {
-      curr_car_index[s][d] = 0;
-    }
-  }
-
-  pthread_t light_ids [num_lights];
+  pthread_t light_ids [num_sides][num_directions];
 
   for (int s = 0; s < num_sides; s++) {
     for (int d = 0; d < num_directions; d++) {
-      traffic_lights[s][d] = RED;
+      // Create a traffic light with side s, direction d, color red and 0 serviced cars
+      traffic_lights[s][d] = (Traffic_Light){s, d, RED, 0};      
 
-      light_loc * parameter;
-      parameter = malloc (sizeof (int));  // memory will be freed by the child-thread
-      light_loc loc = {s, d};
-      *parameter = loc;        
-
-      if (!pthread_create (&light_ids[s * num_sides + d], NULL, manage_light, parameter) == 0) {
-        fprintf(stderr, "Light thread Side %d x Dir %d: Failed to create.\n", s, d);      // in case of failure
+      Traffic_Light * parameter;
+      parameter = malloc (sizeof (int));    // Memory will be freed by the child-thread
+      *parameter = traffic_lights[s][d];        
+      
+      // Initialize the traffic light thread
+      if (!pthread_create (&light_ids[s][d], NULL, manage_light, parameter) == 0) {
+        fprintf(stderr, "Light thread side %d x dir %d: Failed to create.\n", s, d);     
       } else {
-        fprintf(stderr, "Light thread Side %d x Dir %d: Created.\n", s, d);               // in case of correct execution
+        fprintf(stderr, "Light thread side %d x dir %d: Created.\n", s, d);               
       }
     }
   }
@@ -199,31 +193,29 @@ int main(int argc, char * argv[])
 
   // TODO: create a thread that executes supply_cars()
   pthread_t supplier_id;
+  // Initialize the supplier thread
   if (!pthread_create (&supplier_id, NULL, supply_cars, NULL) == 0) {
-    fprintf(stderr, "Supplier thread: Failed to create.\n");      // in case of failure
+    fprintf(stderr, "Supplier thread: Failed to create.\n");      
   } else {
-    fprintf(stderr, "Supplier thread: Created.\n");               // in case of correct execution
+    fprintf(stderr, "Supplier thread: Created.\n");               
   }
 
 
   // TODO: wait for all threads to finish
-  while (get_time_passed() < 40) {
+  while (get_time_passed() < END_TIME) {        // Wait until END_TIME
     continue;
   } 
 
   for (int s = 0; s < num_sides; s++) {
     for (int d = 0; d < num_directions; d++) {
-      sem_post(&car_sem[s][d]);
+      sem_post(&car_sem[s][d]);                 // Send terminating signal to the lights after time > 40
+      pthread_join (light_ids[s][d], NULL);     // Wait for that thead to terminate
     }
   }
-
-  for (int i = 0; i < num_lights; i++) {
-    pthread_join (light_ids[i], NULL);
-  }
-  pthread_join (supplier_id, NULL);
+  pthread_join (supplier_id, NULL);             // Wait for the termiantion of supplier thread
 
 
-  // destroy semaphores
+  // Destroy semaphores
   for (int i = 0; i < 4; i++)
   {
     for (int j = 0; j < 4; j++)
