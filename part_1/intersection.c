@@ -131,26 +131,29 @@ static void* manage_light(void* arg)
     } 
     // If not over continue
     
-
     // Request access to the critical section
-    pthread_mutex_lock(&intersection_mutex);
-    
-    // Turn green for the car with some ID
-    int car_id = curr_car_arrivals[*side_ptr][*direction_ptr][*cars_serviced_ptr].id;
-    printf("traffic light %d %d turns green at time %d for car %d\n", *side_ptr, *direction_ptr, get_time_passed(), car_id);
-    *color_ptr = GREEN;
-
-    sleep(CROSS_TIME);
-    
-    // Turn red after the car
-    *color_ptr = RED;
-    printf("traffic light %d %d turns red at time %d\n", *side_ptr, *direction_ptr, get_time_passed());
-    
-    // Remember that the car was serviced
-    (*cars_serviced_ptr)++;
-
-    // End of critical section
-    pthread_mutex_unlock(&intersection_mutex);
+    if (pthread_mutex_trylock(&intersection_mutex) == 0) {
+      // Lock acquired, continue
+      // Turn green for the car with some ID
+      int car_id = curr_car_arrivals[*side_ptr][*direction_ptr][*cars_serviced_ptr].id;
+      printf("traffic light %d %d turns green at time %d for car %d\n", *side_ptr, *direction_ptr, get_time_passed(), car_id);
+      *color_ptr = GREEN;
+  
+      sleep(CROSS_TIME);
+      
+      // Turn red after the car
+      *color_ptr = RED;
+      printf("traffic light %d %d turns red at time %d\n", *side_ptr, *direction_ptr, get_time_passed());
+      
+      // Remember that the car was serviced
+      (*cars_serviced_ptr)++;
+  
+      // End of critical section
+      pthread_mutex_unlock(&intersection_mutex);
+    } else {
+      // Failed to acquire lock, skip this cycle
+      continue;
+    }
   }
 }
 
@@ -179,11 +182,11 @@ int main(int argc, char * argv[])
       traffic_lights[s][d] = (Traffic_Light){s, d, RED, 0};      
 
       Traffic_Light * parameter;
-      parameter = malloc (sizeof (int));    // Memory will be freed by the child-thread
+      parameter = malloc (sizeof (Traffic_Light));    // Memory will be freed by the child-thread
       *parameter = traffic_lights[s][d];        
       
       // Initialize the traffic light thread
-      if (!pthread_create (&light_ids[s][d], NULL, manage_light, parameter) == 0) {
+      if (pthread_create (&light_ids[s][d], NULL, manage_light, parameter) != 0) {
         fprintf(stderr, "Light thread side %d x dir %d: Failed to create.\n", s, d);     
       } else {
         fprintf(stderr, "Light thread side %d x dir %d: Created.\n", s, d);               
