@@ -151,6 +151,13 @@ static void* manage_light(void* arg)
 
     // End of critical section
     pthread_mutex_unlock(&intersection_mutex);
+
+    // Check if END_TIME is over
+    if (get_time_passed() >= 40) {
+      fprintf(stderr, "Light thread side %d x dir %d: Closed.\n", *side_ptr, *direction_ptr);
+      free(arg);
+      return(0);
+    } 
   }
 }
 
