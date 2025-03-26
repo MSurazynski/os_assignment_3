@@ -127,7 +127,7 @@ static void* manage_light(void* arg)
     if (get_time_passed() >= 40) {
       fprintf(stderr, "Light thread side %d x dir %d: Closed.\n", *side_ptr, *direction_ptr);
       free(arg);
-      pthread_exit(0);
+      return(0);
     } 
     // If not over continue
     
@@ -179,7 +179,7 @@ int main(int argc, char * argv[])
       traffic_lights[s][d] = (Traffic_Light){s, d, RED, 0};      
 
       Traffic_Light * parameter;
-      parameter = malloc (sizeof (int));    // Memory will be freed by the child-thread
+      parameter = malloc (sizeof (Traffic_Light));    // Memory will be freed by the child-thread
       *parameter = traffic_lights[s][d];        
       
       // Initialize the traffic light thread
