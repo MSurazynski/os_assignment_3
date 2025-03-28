@@ -23,8 +23,8 @@
 
 // TODO: Global variables: mutexes, data structures, etc...
 static pthread_mutex_t intersection_mutex = PTHREAD_MUTEX_INITIALIZER;      // Mutex for the critical section
-typedef enum {RED = 0, GREEN = 1} Colors;     // Colors of the traffic lights
-typedef struct                                // Defines the traffic light
+typedef enum {RED = 0, GREEN = 1} Colors;                                   // Colors of the traffic lights
+typedef struct                                                              // Defines the traffic light
 {
   int side;
   int direction;
@@ -32,10 +32,10 @@ typedef struct                                // Defines the traffic light
   int cars_serviced;
 } Traffic_Light;
 
-const static int num_directions = 4;          // Number of lanes per direcion
-const static int num_sides = 4;               // Number of directions
-
-static Traffic_Light traffic_lights[4][4];    // Static array of all traffic lights 
+const static int num_directions = 4;                                        // Number of lanes per direcion
+const static int num_sides = 4;                                             // Number of directions
+                              
+static Traffic_Light traffic_lights[4][4];                                  // Static array of all traffic lights 
 
 
 
@@ -124,7 +124,7 @@ static void* manage_light(void* arg)
     sem_wait(&car_sem[*side_ptr][*direction_ptr]);
 
     // Check if END_TIME is over
-    if (get_time_passed() >= 40) {
+    if (get_time_passed() >= END_TIME) {
       fprintf(stderr, "Light thread side %d x dir %d: Closed.\n", *side_ptr, *direction_ptr);
       free(arg);
       return(0);
@@ -134,6 +134,15 @@ static void* manage_light(void* arg)
 
     // Request access to the critical section
     pthread_mutex_lock(&intersection_mutex);
+
+    // Check if END_TIME is over agian (thread could have been waiting on mutex for some time after the last check of END_TIME on the semaphore)
+    if (get_time_passed() >= END_TIME) {
+      fprintf(stderr, "Light thread side %d x dir %d: Closed.\n", *side_ptr, *direction_ptr);
+      free(arg);
+      pthread_mutex_unlock(&intersection_mutex);  
+      return(0);
+    } 
+    // If not over continue
     
     // Turn green for the car with some ID
     int car_id = curr_car_arrivals[*side_ptr][*direction_ptr][*cars_serviced_ptr].id;
@@ -151,13 +160,6 @@ static void* manage_light(void* arg)
 
     // End of critical section
     pthread_mutex_unlock(&intersection_mutex);
-
-    // Check if END_TIME is over
-    if (get_time_passed() >= 40) {
-      fprintf(stderr, "Light thread side %d x dir %d: Closed.\n", *side_ptr, *direction_ptr);
-      free(arg);
-      return(0);
-    } 
   }
 }
 
@@ -231,4 +233,6 @@ int main(int argc, char * argv[])
       sem_destroy(&car_sem[i][j]);
     }
   }
+
+  return(0);
 }
