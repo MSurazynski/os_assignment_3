@@ -80,7 +80,7 @@ static bool blocks[10][10] = {
   {true, false, false, false, false, false, true, false, false, true}
 };
 
-int blocks_on_lane[10] = {0,0,0,0,0,0,0,0,0,0};
+int blocks_on_lane[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 void increment_block_counter(int i) 
 {
