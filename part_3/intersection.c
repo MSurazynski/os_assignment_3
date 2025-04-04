@@ -296,15 +296,17 @@ static void* manage_light(void *arg)
     // If not over continue
     int encoded_position = encode_position(*side_ptr, *direction_ptr);
     
-    pthread_mutex_lock(&railway_mutex);
-    while (!track_is_safe && blocks[10][encoded_position]) {
-      pthread_cond_wait(&train_cv, &railway_mutex);
-    }
-    pthread_mutex_unlock(&railway_mutex);
-
     // Request access to the critical section
     pthread_mutex_lock(&lanes_mutexes[encoded_position]);
 
+    pthread_mutex_lock(&railway_mutex);
+    while (!track_is_safe && blocks[10][encoded_position]) {
+      pthread_mutex_unlock(&lanes_mutexes[encoded_position]);
+      pthread_cond_wait(&train_cv, &railway_mutex);
+      pthread_mutex_lock(&lanes_mutexes[encoded_position]);
+    }
+    pthread_mutex_unlock(&railway_mutex);
+    
     // At this point, we can claim the route, ensuring no collisions happen
     lock_route(encoded_position);
 
@@ -471,11 +473,8 @@ int main(int argc, char *argv[]) {
         pthread_join (light_ids[s][d], NULL);     // Wait for that thread to terminate
       }
     }
-    sem_post(&train_sem);                         // Send terminating signal to the railway light
-    pthread_join(railway_light_id, NULL);         // Wait for that thread to terminate
 
     pthread_join (supplier_id, NULL);             // Wait for the termiantion of supplier thread
-    pthread_join(train_supplier_id, NULL);
     // destroy semaphores
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 4; j++) {

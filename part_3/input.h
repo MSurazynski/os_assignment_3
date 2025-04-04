@@ -10,9 +10,9 @@
 #define END_TIME 40
 
 // the array of car arrivals for the intersection
-const Car_Arrival input_car_arrivals[] = { {0, EAST, LEFT, 2}, {1, WEST, STRAIGHT, 4}, {2, SOUTH, RIGHT, 6} };
+const Car_Arrival input_car_arrivals[] = { {0, EAST, LEFT, 0}, {1, WEST, LEFT, 1}, {2, SOUTH, STRAIGHT, 8}, {3, SOUTH, UTURN, 10} };
 
 // the array of train arriavls for the intersection
-const Train_Arrival input_train_arrivals[] = {{0, 5, 3}, {1, 3, 6}};
+const Train_Arrival input_train_arrivals[] = {{0, 5, 2}};
 
 #endif
