@@ -4,9 +4,9 @@
  *
  * Intersection Part 3
  *
- * STUDENT_NAME_1 (STUDENT_NR_1)
- * STUDENT_NAME_2 (STUDENT_NR_2)
- * STUDENT_NAME_3 (STUDENT_NR_3)
+ * Michał Surażyński (1967665)
+ * Bram van Waes (2001624)
+ * Mateusz Rozmyslowicz (1966243)
  */
 
 #include <errno.h>
@@ -24,7 +24,7 @@
 // TODO: Global variables: mutexes, conditions, data structures, etc...
 static pthread_mutex_t lanes_mutexes[10];
 static pthread_mutex_t counter_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t train_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t railway_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t train_cv = PTHREAD_COND_INITIALIZER;
 typedef enum {RED = 0, GREEN = 1} Colors;                                   // Colors of the traffic lights
 typedef struct                                                              // Defines the traffic light
@@ -37,7 +37,6 @@ typedef struct                                                              // D
 
 typedef struct                                                              // Defines the railway light
 {
-  bool isOn;
   int trains_serviced;
 } Railway_Light;
 
@@ -296,14 +295,15 @@ static void* manage_light(void *arg)
     } 
     // If not over continue
     int encoded_position = encode_position(*side_ptr, *direction_ptr);
+    
+    pthread_mutex_lock(&railway_mutex);
+    while (!track_is_safe && blocks[10][encoded_position]) {
+      pthread_cond_wait(&train_cv, &railway_mutex);
+    }
+    pthread_mutex_unlock(&railway_mutex);
 
     // Request access to the critical section
     pthread_mutex_lock(&lanes_mutexes[encoded_position]);
-
-
-    while (!track_is_safe && blocks[10][encoded_position]) {
-      pthread_cond_wait(&train_cv, &lanes_mutexes[encoded_position]);
-    }
 
     // At this point, we can claim the route, ensuring no collisions happen
     lock_route(encoded_position);
@@ -367,31 +367,24 @@ static void* manage_railway(void* arg)
     }
 
     // If not over continue
-    pthread_mutex_lock(&train_mutex);
-
-    if (get_time_passed() >= END_TIME) {
-      fprintf(stderr, "Railway light thread: Closed.\n");
-      free(arg);
-      pthread_mutex_unlock(&train_mutex);
-      return(0);
-    }
     // - update relevant conditions
+    pthread_mutex_lock(&railway_mutex);
     track_is_safe = false;
+    pthread_mutex_unlock(&railway_mutex);
 
     // - sleep for CROSS_TIME seconds (to let cars leave the intersection)
     sleep(CROSS_TIME);
 
     // - turn the railway crossing signals on
     printf("railway signal turns on at time %d for train %d\n", get_time_passed(), train_id);
-    railway_light->isOn = true;
     
     // - sleep for the train duration
     sleep(duration);
 
     // - turn the railway crossing signals off
     printf("railway signal turns off at time %d\n", get_time_passed());
-    railway_light->isOn = false;
     
+    pthread_mutex_lock(&railway_mutex);
     // - update relevant conditions
     track_is_safe = true;
 
@@ -399,7 +392,7 @@ static void* manage_railway(void* arg)
 
     // - notify traffic lights that passage is allowed
     pthread_cond_broadcast(&train_cv);
-    pthread_mutex_unlock(&train_mutex);
+    pthread_mutex_unlock(&railway_mutex);
   }
 
   return (0);
@@ -443,7 +436,7 @@ int main(int argc, char *argv[]) {
 
     // TODO: create a thread for manage_railway
     pthread_t railway_light_id;
-    Railway_Light railway_light = (Railway_Light){false, 0};
+    Railway_Light railway_light = (Railway_Light){0};
     if (!pthread_create (&railway_light_id, NULL, manage_railway, &railway_light) == 0) {
       fprintf(stderr, "Railway thread: Failed to create.\n");      
     } else {
@@ -475,11 +468,14 @@ int main(int argc, char *argv[]) {
     for (int s = 0; s < num_sides; s++) {
       for (int d = 0; d < num_directions; d++) {
         sem_post(&car_sem[s][d]);                 // Send terminating signal to the lights after time > 40
-        pthread_join (light_ids[s][d], NULL);     // Wait for that thead to terminate
+        pthread_join (light_ids[s][d], NULL);     // Wait for that thread to terminate
       }
     }
+    sem_post(&train_sem);                         // Send terminating signal to the railway light
+    pthread_join(railway_light_id, NULL);         // Wait for that thread to terminate
+
     pthread_join (supplier_id, NULL);             // Wait for the termiantion of supplier thread
-  
+    pthread_join(train_supplier_id, NULL);
     // destroy semaphores
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 4; j++) {

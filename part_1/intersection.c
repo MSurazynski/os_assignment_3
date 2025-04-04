@@ -2,11 +2,11 @@
  * Operating Systems (2INC0) Practical Assignment
  * Threading
  *
- * Intersection Part [REPLACE WITH PART NUMBER]
+ * Intersection Part 1
  * 
  * Michał Surażyński (1967665)
- * STUDENT_NAME_2 (STUDENT_NR_2)
- * STUDENT_NAME_3 (STUDENT_NR_3)
+ * Bram van Waes (2001624)
+ * Mateusz Rozmyslowicz (1966243)
  */
 
 #include <stdio.h>

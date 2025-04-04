@@ -6,7 +6,7 @@
  * 
  * Michał Surażyński (1967665)
  * Bram van Waes (2001624)
- * STUDENT_NAME_3 (STUDENT_NR_3)
+ * Mateusz Rozmyslowicz (1966243)
  */
 
 #include <stdio.h>
